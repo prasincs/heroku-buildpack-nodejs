@@ -1,0 +1,64 @@
+#!/bin/sh
+
+set -e
+
+lua_version="$1"
+
+if [ "$lua_version" == "" ]; then
+  echo "usage: $0 VERSION"
+  exit 1
+fi
+
+if [ "$AWS_ID" == "" ]; then
+  echo "must set AWS_ID"
+  exit 1
+fi
+
+if [ "$AWS_SECRET" == "" ]; then
+  echo "must set AWS_SECRET"
+  exit 1
+fi
+
+if [ "$S3_BUCKET" == "" ]; then
+  echo "must set S3_BUCKET"
+  exit 1
+fi
+
+basedir="$( cd -P "$( dirname "$0" )" && pwd )"
+
+# make a temp directory
+tempdir="$( mktemp -t lua_XXXX )"
+rm -rf $tempdir
+mkdir -p $tempdir
+pushd $tempdir
+
+# download and extract lua
+curl http://www.lua.org/ftp/lua-${lua_version}.tar.gz -o lua.tgz
+tar xzvf lua.tgz
+
+# go into lua dir
+pushd lua-${lua_version}
+orig_path="/usr/local/"
+## Escape path for sed using bash find and replace
+#orig_path="${orig_path//\//\\/}"
+new_path="/app/vendor/lua-${lua_version}/"
+#new_path="${new_path//\//\\/}"
+set -x 
+perl -pi -e "s,${orig_path},${new_path}/,g" src/luaconf.h
+cat src/luaconf.h 
+set -x 
+
+perl -pi -e "s,prefix= ${orig_path},prefix=${new_path},g" etc/lua.pc
+
+
+
+
+
+# build and package lua for heroku
+
+vulcan build -c "make linux INSTALL_TOP=${new_path} && make install INSTALL_TOP=${new_path}" -v -o $tempdir/lua-${lua_version}.tgz
+
+# upload lua to s3
+#$basedir/aws/s3 put $S3_BUCKET \
+#  lua-${lua_version}.tgz $tempdir/lua-${lua_version}.tgz
+
